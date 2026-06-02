@@ -1,5 +1,6 @@
-import { Agent } from "@atproto/api";
+import { Agent, type BlobRef } from "@atproto/api";
 import fs from "node:fs/promises";
+import { dirname } from "node:path";
 import { stdin, stdout } from "node:process";
 import { createInterface } from "node:readline/promises";
 
@@ -12,14 +13,17 @@ export interface Publication {
   url: URL;
   name: string;
   description?: string;
-  icon?: Buffer;
+  icon?: {
+    blob: Buffer;
+    mimeType: string;
+  };
 }
-type ExistingPublication = Publication & { rkey: string };
+type PublicationWithRkey = Publication & { rkey: string };
 
 /**
  * https://standard.site/docs/lexicons/document/
  */
-export interface Document {
+interface Document {
   /**
    * Document title
    */
@@ -40,7 +44,7 @@ export interface Document {
   // tags?: string[];
 }
 
-type ExistingDocument = Document & { rkey: string };
+type DocumentWithRkey = Document & { rkey: string };
 
 const documentStringFields = [
   "title",
@@ -52,7 +56,6 @@ const documentStringFields = [
 const publicationStringFields = [
   "name",
   "description",
-  // TODO: handle "icon",
 ] as const satisfies Array<keyof Publication>;
 
 type Action = "createRecord" | "putRecord";
@@ -62,10 +65,11 @@ type Action = "createRecord" | "putRecord";
  *
  * ```
  * <link rel="site.standard.document"
- *   href="at://${myDid}/site.standard.document/${pathToRkey(doc.path)}">
+ *   href="at://${myDid}/site.standard.document/${rkeyFromPath(doc.path)}">
  * ```
  */
-export const pathToRkey = (path: string) => path.replace(/[^a-zA-Z0-9._~-]/g, "").slice(0, 512);
+export const rkeyFromPath = (path: string): string =>
+  path.replace(/[^a-zA-Z0-9._~-]/g, "").slice(0, 512);
 
 /**
  * If in an interactive terminal and project is not already set up, this does the setup.
@@ -75,22 +79,26 @@ export const createOrUpdateStandardSite = async (
   session: ConstructorParameters<typeof Agent>[0],
   pub: Publication,
   docs: Document[],
-) => {
+): Promise<void> => {
   const agent = new Agent(session);
 
   const { pathname } = pub.url;
   const wellKnown = "routes/.well-known/site.standard.publication" +
-    (pathname === "/" ? "" : pathname);
+    (pathname === "/" ? "" : (pathname.endsWith("/") ? `${pathname}index.html` : pathname));
   const publicationUri = await pubUriFromFile(wellKnown);
 
+  // console.log(await agent.com.atproto.repo.listRecords({
+  //   repo: agent.did!,
+  //   collection: "site.standard.publication",
+  //   limit: 100,
+  // }));
+  // console.log(await fetchDocuments(agent, publicationUri));
+  // console.log(await agent.com.atproto.repo.deleteRecord({ repo: agent.did!, collection: "site.standard.publication", rkey: "self" }));
+  // return;
+
+  docs.sort((a, b) => a.publishedAt < b.publishedAt ? 1 : -1);
   // limit to 100 until we implement pagination in fetchDocuments
-  docs = docs.sort((a, b) => a.publishedAt > b.publishedAt ? 1 : -1).slice(0, 100);
-  for (const doc of docs) {
-    // Basic validation in case people don't typecheck their YAML metadata.
-    if (!doc.path) throw Error(`path not found for doc ${doc.title || JSON.stringify(doc)}`);
-    if (!doc.title) throw Error(`title not found for doc ${doc.path}`);
-    if (!doc.publishedAt) throw Error(`publishedAt not found for doc ${doc.path}`);
-  }
+  const newDocs = validateDocs(docs).slice(0, 100);
 
   if (!publicationUri) {
     if (!stdout.isTTY || process.env.CI) {
@@ -101,11 +109,11 @@ export const createOrUpdateStandardSite = async (
     }
     const rl = createInterface({ input: stdin, output: stdout });
     const answer = await rl.question(`
-Detected the following document URLs:
-${docs.map((d) => pub.url + d.path).join("\n")}
+Detected the following documents:
+${newDocs.map((d) => `URL: ${pub.url}${d.path}\n  -> rkey: ${d.rkey}`).join("\n")}
 
 Open the URLs in your browser to make sure they're correct.
-We use them to uniquely identify your records in the Atmosphere.
+The derived rkeys are used to uniquely identify them in the Atmosphere.
 
 Same for the publication URL:
 ${pub.url}
@@ -116,26 +124,34 @@ Are all the above URLs correct? (y/n -> Enter)
     rl.close();
     stdin.destroy();
     if (answer.toLowerCase() === "y" || answer.toLowerCase() === "yes") {
-      const rkey = pathname === "/" ? "self" : pathToRkey(pub.url.pathname);
+      const rkey = pathname === "/" ? "self" : rkeyFromPath(pub.url.pathname);
+      await fs.mkdir(dirname(wellKnown), { recursive: true });
       await fs.writeFile(wellKnown, `at://${agent.did}/site.standard.publication/${rkey}`);
+      console.clear();
       console.log(`
-Successfully wrote ${wellKnown}. Add that file to your git repository.
+Successfully wrote ${wellKnown}
+Add that file to your git repository.
 
 Next time you run this script, it will publish things into the Atmosphere.
 Either run this script manually whenver you have a new post,
 or set up your CI/CD build step to run it automatically.
 
 Finally, don't forget to add the following snippet containing your DID
-to your document detail pages (import { pathToRkey } from "@mastrojs/atproto")
+to your document detail pages (import { rkeyFromPath } from "@mastrojs/atproto")
 <link rel="site.standard.document"
-  href="at://${agent.did}/site.standard.document/\${pathToRkey(doc.path)}">
+  href="at://${agent.did}/site.standard.document/\${rkeyFromPath(doc.path)}">
 `);
     }
   } else {
-    await createOrUpdatePublication(agent, pub);
-    await createOrUpdateDocuments(agent, publicationUri, docs);
+    const rkey = pub.url.pathname === "/" ? "self" : rkeyFromPath(pub.url.pathname);
+    await createOrUpdatePublication(agent, { ...pub, rkey });
+    await createOrUpdateDocuments(agent, publicationUri, newDocs);
   }
 };
+
+/**
+ * Publication helpers
+ */
 
 const pubUriFromFile = async (wellKnownFilePath: string) => {
   try {
@@ -151,13 +167,16 @@ const pubUriFromFile = async (wellKnownFilePath: string) => {
   }
 };
 
-const createOrUpdatePublication = async (agent: Agent, pub: Publication) => {
-  const rkey = pub.url.pathname === "/" ? "self" : pub.url.pathname.replaceAll("/", "");
-  const oldPub = await fetchPublication(agent, rkey);
+const createOrUpdatePublication = async (agent: Agent, pub: PublicationWithRkey) => {
+  const oldPub = await fetchPublication(agent, pub.rkey);
   if (!oldPub) {
     await pushPublication(agent, "createRecord", pub);
   } else if (publicationStringFields.some((field) => oldPub[field] !== pub[field])) {
-    await pushPublication(agent, "putRecord", { ...pub, rkey });
+    if (oldPub.icon && pub.icon && oldPub.icon.size === Buffer.byteLength(pub.icon.blob)) {
+      // don't upload a new blob if the icon still has the same size (probably not changed)
+      delete pub.icon;
+    }
+    await pushPublication(agent, "putRecord", pub);
   }
 };
 
@@ -168,32 +187,27 @@ const fetchPublication = async (agent: Agent, rkey: string) => {
       collection: "site.standard.publication",
       rkey,
     });
-    return pub.data.value as unknown as ExistingPublication;
-  } catch (err) {
-    if (err instanceof Error && err.message.includes("RecordNotFound")) {
+    return pub.data.value as {
+      name: string;
+      description: string;
+      icon?: BlobRef;
+      preferences: { showInDiscover: boolean };
+    };
+  } catch (e: any) {
+    if (e.error === "RecordNotFound") {
       return;
     } else {
-      throw err;
+      throw e;
     }
   }
 };
 
-function pushPublication(
-  agent: Agent,
-  action: "createRecord",
-  pub: Publication,
-): ReturnType<typeof agent.com.atproto.repo.createRecord>;
-function pushPublication(
-  agent: Agent,
-  action: "putRecord",
-  pub: ExistingPublication,
-): ReturnType<typeof agent.com.atproto.repo.putRecord>;
-async function pushPublication(agent: Agent, action: Action, pub: Publication) {
+const pushPublication = async (agent: Agent, action: Action, pub: PublicationWithRkey) => {
   let icon;
   if (pub.icon) {
     const res = await agent.com.atproto.repo.uploadBlob(
-      new Uint8Array(pub.icon),
-      { encoding: "image/png" }, // TODO: detect extension
+      new Uint8Array(pub.icon.blob),
+      { encoding: pub.icon.mimeType },
     );
     const { blob } = res.data;
     icon = {
@@ -204,35 +218,58 @@ async function pushPublication(agent: Agent, action: Action, pub: Publication) {
     };
   }
 
-  return await agent.com.atproto.repo[action]({
+  const res = await agent.com.atproto.repo[action]({
     repo: agent.did!,
     collection: "site.standard.publication",
-    rkey: "self",
+    rkey: pub.rkey,
     record: {
       $type: "site.standard.publication",
-      url: pub.url,
+      url: pub.url.toString(),
       name: pub.name,
       description: pub.description,
       icon,
       preferences: { showInDiscover: true },
     },
   });
-}
+  console.log(`${action === "createRecord" ? "Created" : "Updated"} publication ${res.data.uri}`);
+  return res;
+};
 
-const createOrUpdateDocuments = async (agent: Agent, publicationUri: string, docs: Document[]) => {
-  const existingDocs: Record<string, ExistingDocument> = {};
+/**
+ * Document helpers
+ */
+
+const validateDocs = (docs: Document[]) => {
+  const usedRKeys: Record<string, boolean> = {};
+  for (const doc of docs) {
+    // Basic validation in case people don't typecheck their YAML metadata.
+    if (!doc.path) throw Error(`path not found for doc ${doc.title || JSON.stringify(doc)}`);
+    if (!doc.title) throw Error(`title not found for doc ${doc.path}`);
+    if (!doc.publishedAt) throw Error(`publishedAt not found for doc ${doc.path}`);
+    const rkey = rkeyFromPath(doc.path);
+    if (!rkey) throw Error(`Couldn't construct rkey for doc ${doc.path}`);
+    if (usedRKeys[rkey]) throw Error(`rkey ${rkey} was already used by another document`);
+    usedRKeys[rkey] = true;
+    (doc as DocumentWithRkey).rkey = rkey;
+  }
+  return docs as DocumentWithRkey[];
+};
+
+const createOrUpdateDocuments = async (
+  agent: Agent,
+  publicationUri: string,
+  docs: DocumentWithRkey[],
+) => {
+  const existingDocs: Record<string, DocumentWithRkey> = {};
   for (const doc of await fetchDocuments(agent, publicationUri)) {
-    // we use the path (which may contain slashes etc.) to identify records
-    // TODO: maybe we should use rkey and check for collisions withhin the new documents
-    existingDocs[doc.path] = doc;
+    existingDocs[doc.rkey] = doc;
   }
   for (const newDoc of docs) {
-    const oldDoc = existingDocs[newDoc.path];
+    const oldDoc = existingDocs[newDoc.rkey];
     if (!oldDoc) {
-      const rkey = pathToRkey(newDoc.path);
-      await pushDocument(agent, publicationUri, "createRecord", { ...newDoc, rkey });
+      // await pushDocument(agent, publicationUri, "createRecord", newDoc);
     } else if (documentStringFields.some((field) => oldDoc[field] !== newDoc[field])) {
-      await pushDocument(agent, publicationUri, "putRecord", { ...newDoc, rkey: oldDoc.rkey });
+      await pushDocument(agent, publicationUri, "putRecord", newDoc);
     }
   }
 };
@@ -245,19 +282,19 @@ const fetchDocuments = async (agent: Agent, publicationUri: string) => {
   });
   return docs.data.records
     .filter((r) => r.value.site === publicationUri)
-    .map((r) => ({ ...r.value, rkey: r.uri.split("/").pop() } as ExistingDocument));
+    .map((r) => ({ ...r.value, rkey: r.uri.split("/").pop() } as DocumentWithRkey));
 };
 
-const pushDocument = (
+const pushDocument = async (
   agent: Agent,
   publicationUri: string,
   action: Action,
-  doc: ExistingDocument,
+  doc: DocumentWithRkey,
 ) => {
-  return agent.com.atproto.repo[action]({
+  const res = await agent.com.atproto.repo[action]({
     repo: agent.did!,
     collection: "site.standard.document",
-    rkey: (doc as ExistingDocument).rkey,
+    rkey: (doc as DocumentWithRkey).rkey,
     record: {
       $type: "site.standard.document",
       site: publicationUri,
@@ -271,4 +308,6 @@ const pushDocument = (
       // bskyPostRef: { uri: "at://mastrojs.bsky.social/app.bsky.feed.post/3mmrn4yif6s2c", cid: "..." },
     },
   });
+  console.log(`${action === "createRecord" ? "Created" : "Updated"} document ${res.data.uri}`);
+  return res;
 };
