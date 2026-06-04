@@ -60,13 +60,18 @@ type Action = "createRecord" | "putRecord";
  * Use this to reconstruct the rkey that was used to publish this document to the Atmosphere.
  * Pass in the same `path` that your document had when you called `createOrUpdateDocuments`.
  *
+ * If your blog doesn't live on the homepage of the domain, the optional second argument
+ * should be `publication.url.pathname` (e.g. `/blog/`). It defaults to `self`.
+ *
  * ```
  * <link rel="site.standard.document"
- *   href="at://${myDid}/site.standard.document/${pubPath || "self"}-${rkeyFromPath(doc.path)}">
+ *   href="at://${myDid}/site.standard.document/${rkeyFromPath(doc.path, pub.url.pathname)}">
  * ```
  */
-export const rkeyFromPath = (path: string): string =>
-  path.replace(/[^a-zA-Z0-9._~-]/g, "").slice(0, 512);
+export const rkeyFromPath = (path: string, prefix = "self"): string =>
+  normalizeRkey(`${prefix === "/" ? "self" : prefix}-${path}`);
+
+const normalizeRkey = (path: string) => path.replace(/[^a-zA-Z0-9._~-]/g, "").slice(0, 512);
 
 /**
  * If in an interactive terminal and project is not already set up, this does the setup.
@@ -84,7 +89,7 @@ export const createOrUpdateStandardSite = async (
   const agent = new Agent(session);
 
   const { pathname } = pub.url;
-  const pubRkey = pathname === "/" ? "self" : rkeyFromPath(pathname);
+  const pubRkey = pathname === "/" ? "self" : normalizeRkey(pathname);
   const wellKnown = `${opts?.baseFolder || "routes"}/.well-known/site.standard.publication${
     pathname === "/" ? "" : (pathname.endsWith("/") ? `${pathname}index.html` : pathname)
   }`;
@@ -100,7 +105,7 @@ import { rkeyFromPath } from "@mastrojs/atproto";
 To verify you got it correct, use e.g. https://site-validator.fly.dev
 
 <link rel="site.standard.document"
-  href="at://${agent.did}/site.standard.document/${pubRkey}-\${rkeyFromPath(doc.path)}">
+  href="at://${agent.did}/site.standard.document/\${rkeyFromPath(doc.path, "${pubRkey}")}">
 `;
 
   if (!publicationUri) {
@@ -243,11 +248,10 @@ const validateAndAddRkey = (docs: Document[], rkeyPrefix: string) => {
   for (const doc of docs) {
     // Basic validation in case people don't typecheck their YAML metadata.
     if (!doc.path) throw Error(`path not found for doc ${doc.title || JSON.stringify(doc)}`);
+    if (!normalizeRkey(doc.path)) throw Error(`Couldn't construct rkey for doc ${doc.path}`);
     if (!doc.title) throw Error(`title not found for doc ${doc.path}`);
     if (!doc.publishedAt) throw Error(`publishedAt not found for doc ${doc.path}`);
-    let rkey = rkeyFromPath(doc.path);
-    if (!rkey) throw Error(`Couldn't construct rkey for doc ${doc.path}`);
-    rkey = `${rkeyPrefix}-${rkey}`;
+    const rkey = rkeyFromPath(doc.path, rkeyPrefix);
     if (usedRKeys[rkey]) throw Error(`rkey ${rkey} was already used by another document`);
     usedRKeys[rkey] = true;
     (doc as DocumentWithRkey).rkey = rkey;
