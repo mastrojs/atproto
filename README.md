@@ -1,11 +1,16 @@
 # @mastrojs/atproto
 
-Helper scripts to integrate with the Atmosphere. Currently for pushing [standard.site](https://standard.site/) records for your blog posts.
+Helper scripts to integrate with the Atmosphere. Currently for creating and updating [standard.site](https://standard.site/) records from your existing website without the headache.
+
+
+## How?
+
+The easiest way to get started, is to [set up a new Mastro project](https://mastrojs.github.io/#powerful-for-experienced-developers) and select the blog template.
+
+But you can use this library with any stack that allows you to get your blog posts into a JavaScript variable. Simply call `createOrUpdateStandardSite(session, publication, docs)` whenever your blog posts changed – e.g. for a statically generated site, on each deploy.
 
 
 ## Install
-
-If you haven't already, [set up a new Mastro project](https://mastrojs.github.io/#powerful-for-experienced-developers) and select the blog template. Then:
 
 ### Deno
 
@@ -22,12 +27,12 @@ If you haven't already, [set up a new Mastro project](https://mastrojs.github.io
 
 ## Usage
 
-Then create a new file, e.g. `publishToAtmosphere.ts`, with this content and adjust with your settings:
+Create a new file, e.g. `publishToAtmosphere.ts`, with the following content and adjust with your settings:
 
 ```ts
 import fs from "node:fs/promises";
 import { createOrUpdateStandardSite, CredentialSession } from "@mastrojs/atproto";
-import { readBlogFiles } from "../markdown.ts";
+import { readMarkdownFiles } from "@mastrojs/markdown";
 
 const identifier = "mastrojs.bsky.social";
 
@@ -47,7 +52,7 @@ const publication = {
   url: new URL("https://example.com/news/"),
   name: "Peter's News",
   description: "",
-  // Square image to identify the publication. Should be at least 256x256:
+  // Optional square image for the publication, should be at least 256x256:
   icon: {
     blob: await fs.readFile("icon.png"),
     mimeType: "image/png",
@@ -58,16 +63,17 @@ const posts = await readMarkdownFiles("data/posts/*.md");
 const docs = posts.map((p) => ({
   title: p.meta.title!,
   publishedAt: new Date(p.meta.date!),
-  // this path will be appended to publication.url to get the URL:
+  // this path will be appended to publication.url to get the full URL:
   path: p.path.slice("data/posts/".length, -3) + "/",
 }));
 
 const session = new CredentialSession(new URL("https://bsky.social"));
 await session.login({ identifier, password });
-createOrUpdateStandardSite(session, publication, docs);
+
+await createOrUpdateStandardSite(session, publication, docs);
 ```
 
-Then run the script you just created with your password as an env variable:
+Then run the above script with your password as an env variable:
 
 ### Deno
 
@@ -81,8 +87,9 @@ Then run the script you just created with your password as an env variable:
 
     ATPROTO_PASSWORD=xxxx-xxxx-xxxx-xxxx bun publishToAtmosphere.ts
 
-If you confirm to the script that the URLs and derived rkeys look good, it will create a file in `routes/.well-known/site.standard.publication` (The `routes` prefix is what may be `public` in other frameworks than Mastro – use the `opts` argument of [createOrUpdateStandardSite](https://jsr.io/@mastrojs/atproto/doc/~/createOrUpdateStandardSite) to customize.). After that, run it a second time to publish things to the Atmosphere.
+If you confirm to the script that the URLs and derived rkeys look good, it will create a file in `routes/.well-known/site.standard.publication` (The `routes` prefix is what may be `public` in other frameworks than Mastro – use the `opts` argument of [createOrUpdateStandardSite](https://jsr.io/@mastrojs/atproto/doc/~/createOrUpdateStandardSite) to customize).
+
+After that, run it a second time to publish things to the Atmosphere. Optionally, you can then set up your CI/CD pipeline to run the script on each deploy.
 
 You can use e.g. https://pdsls.dev to verify records on the PDS.
-
 To see all functions `@mastrojs/atproto` exports, see its [API docs](https://jsr.io/@mastrojs/atproto/doc).

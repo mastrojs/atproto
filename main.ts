@@ -93,6 +93,8 @@ export const createOrUpdateStandardSite = async (
   const addLinkText = `
 Don't forget to add the following link tag to your document detail pages using
 import { rkeyFromPath } from "@mastrojs/atproto";
+To verify you got it correct, search the at-URI on https://pdsls.dev
+
 <link rel="site.standard.document"
   href="at://${agent.did}/site.standard.document/${pubRkey}-\${rkeyFromPath(doc.path)}">
 `;
