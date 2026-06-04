@@ -57,7 +57,8 @@ const publicationStringFields = [
 type Action = "createRecord" | "putRecord";
 
 /**
- * Use this to construct the rkey we used to publish to the Atmosphere from your document's path.
+ * Use this to reconstruct the rkey that was used to publish this document to the Atmosphere.
+ * Pass in the same `path` that your document had when you called `createOrUpdateDocuments`.
  *
  * ```
  * <link rel="site.standard.document"
@@ -96,7 +97,7 @@ export const createOrUpdateStandardSite = async (
   const addLinkText = `
 Don't forget to add the following link tag to your document detail pages using
 import { rkeyFromPath } from "@mastrojs/atproto";
-To verify you got it correct, search the at-URI on https://pdsls.dev
+To verify you got it correct, use e.g. https://site-validator.fly.dev
 
 <link rel="site.standard.document"
   href="at://${agent.did}/site.standard.document/${pubRkey}-\${rkeyFromPath(doc.path)}">

@@ -91,5 +91,5 @@ If you confirm to the script that the URLs and derived rkeys look good, it will 
 
 After that, run it a second time to publish things to the Atmosphere. Optionally, you can then set up your CI/CD pipeline to run the script on each deploy.
 
-You can use e.g. https://pdsls.dev to verify records on the PDS.
+You can use e.g. https://site-validator.fly.dev to verify [standard.site](https://standard.site/) records on the PDS.
 To see all functions `@mastrojs/atproto` exports, see its [API docs](https://jsr.io/@mastrojs/atproto/doc).
