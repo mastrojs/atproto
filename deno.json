@@ -7,7 +7,7 @@
     "lineWidth": 100
   },
   "exports": {
-    ".": "./main.ts"
+    ".": "./src/index.ts"
   },
   "imports": {
     "@atproto/api": "npm:@atproto/api@^0.20.7"
