@@ -75,7 +75,10 @@ export const createOrUpdateStandardSite = async (
   session: ConstructorParameters<typeof Agent>[0],
   pub: Publication,
   docs: Document[],
-  opts?: { baseFolder?: string },
+  opts?: {
+    /** Defaults to `routes`, but for other frameworks than Mastro may need to be set to `public` */
+    baseFolder?: string;
+  },
 ): Promise<void> => {
   const agent = new Agent(session);
 
