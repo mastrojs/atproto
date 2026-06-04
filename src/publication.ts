@@ -36,7 +36,7 @@ export interface BasicTheme {
   background: Color;
   /** Color used for content text */
   foreground: Color;
-  /** Color used for links and button backgrounds */
+  /** Color used for button backgrounds and links */
   accent: Color;
   /** Color used for button text */
   accentForeground: Color;

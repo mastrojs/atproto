@@ -31,24 +31,28 @@ Create a new file, e.g. `publishToAtmosphere.ts`, with the following content and
 
 ```ts
 import fs from "node:fs/promises";
-import { createOrUpdateStandardSite, CredentialSession } from "@mastrojs/atproto";
 import { readMarkdownFiles } from "@mastrojs/markdown";
+import {
+  createOrUpdateStandardSite,
+  CredentialSession,
+  type Publication,
+} from "@mastrojs/atproto";
 
-const identifier = "mastrojs.bsky.social";
+const identifier = "your.bsky.social";
 
 const password = process.env.ATPROTO_PASSWORD;
 if (!password) {
   console.error(`
 No password found!
 
-Get one from https://bsky.app/settings/app-passwords and locally run like:
+Get one from https://bsky.app/settings/app-passwords and run locally with:
 ATPROTO_PASSWORD=xxxx-xxxx-xxxx-xxxx node publishToAtmosphere.ts
-In your CI/CD pipeline, add it to its secret manager instead.
+In a CI/CD pipeline, add the password to your secret manager instead.
 `);
   process.exit(1);
 }
 
-const publication = {
+const publication: Publication = {
   url: new URL("https://example.com/news/"),
   name: "Peter's News",
   description: "",
@@ -56,7 +60,14 @@ const publication = {
   icon: {
     blob: await fs.readFile("icon.png"),
     mimeType: "image/png",
-  }
+  },
+  // Optional RGB colors:
+  basicTheme: {
+    background: { r: 255, g: 255, b: 255 },
+    foreground: { r: 23, g: 24, b: 28 },
+    accent: { r: 0, g: 0, b: 0 }, // button color
+    accentForeground: { r: 255, g: 255, b: 255 }, // button text
+  },
 };
 
 const posts = await readMarkdownFiles("data/posts/*.md");
