@@ -17,8 +17,34 @@ export interface Publication {
     blob: Buffer;
     mimeType: string;
   };
+  basicTheme?: BasicTheme;
 }
 type PublicationWithRkey = Publication & { rkey: string };
+
+/**
+ * https://standard.site/docs/lexicons/theme/
+ */
+export interface BasicTheme {
+  /** Color used for content background */
+  background: Color;
+  /** Color used for content text */
+  foreground: Color;
+  /** Color used for links and button backgrounds */
+  accent: Color;
+  /** Color used for button text */
+  accentForeground: Color;
+}
+const themeKeys = [
+  "background",
+  "foreground",
+  "accent",
+  "accentForeground",
+] as const satisfies Array<keyof BasicTheme>;
+
+/**
+ * RGB Color
+ */
+export type Color = { r: number; g: number; b: number };
 
 /**
  * https://standard.site/docs/lexicons/document/
@@ -48,11 +74,6 @@ const documentStringFields = [
   "description",
   "textContent",
 ] as const satisfies Array<keyof Document>;
-
-const publicationStringFields = [
-  "name",
-  "description",
-] as const satisfies Array<keyof Publication>;
 
 type Action = "createRecord" | "putRecord";
 
@@ -175,14 +196,36 @@ const createOrUpdatePublication = async (agent: Agent, pub: PublicationWithRkey)
   const oldPub = await fetchPublication(agent, pub.rkey);
   if (!oldPub) {
     await pushPublication(agent, "createRecord", pub);
-  } else if (publicationStringFields.some((field) => oldPub[field] !== pub[field])) {
-    if (oldPub.icon && pub.icon && oldPub.icon.size === Buffer.byteLength(pub.icon.blob)) {
-      // don't upload a new blob if the icon still has the same size (probably not changed)
-      delete pub.icon;
-    }
+  } else if (pubChanged(oldPub, pub)) {
     await pushPublication(agent, "putRecord", pub);
   }
 };
+
+const pubChanged = (oldPub: FetchedPublication, pub: PublicationWithRkey): boolean => {
+  const iconChanged =
+    oldPub.icon?.size !== (pub.icon ? Buffer.byteLength(pub.icon.blob) : undefined);
+  if (!iconChanged) {
+    // don't upload a new blob but potentially still update the other fields
+    delete pub.icon;
+  }
+  const oldTheme = oldPub.basicTheme;
+  const newTheme = pub.basicTheme;
+  const themeChanged = themeKeys.some((key) =>
+    oldTheme?.[key].r !== newTheme?.[key].r ||
+    oldTheme?.[key].g !== newTheme?.[key].g ||
+    oldTheme?.[key].b !== newTheme?.[key].b
+  );
+  return iconChanged || themeChanged || oldPub.name !== pub.name ||
+    oldPub.description !== pub.description;
+};
+
+interface FetchedPublication {
+  name: string;
+  description: string;
+  icon?: BlobRef;
+  basicTheme?: BasicTheme;
+  preferences: { showInDiscover: boolean };
+}
 
 const fetchPublication = async (agent: Agent, rkey: string) => {
   try {
@@ -191,12 +234,7 @@ const fetchPublication = async (agent: Agent, rkey: string) => {
       collection: "site.standard.publication",
       rkey,
     });
-    return pub.data.value as {
-      name: string;
-      description: string;
-      icon?: BlobRef;
-      preferences: { showInDiscover: boolean };
-    };
+    return pub.data.value as unknown as FetchedPublication;
   } catch (e: any) {
     if (e.error === "RecordNotFound") {
       return;
@@ -222,6 +260,16 @@ const pushPublication = async (agent: Agent, action: Action, pub: PublicationWit
     };
   }
 
+  const theme = pub.basicTheme;
+  const basicTheme = theme
+    ? {
+      "$type": "site.standard.theme.basic",
+      ...Object.fromEntries(
+        themeKeys.map((key) => [key, { ...theme[key], $type: "site.standard.theme.color#rgb" }]),
+      ),
+    }
+    : undefined;
+
   const res = await agent.com.atproto.repo[action]({
     repo: agent.did!,
     collection: "site.standard.publication",
@@ -232,6 +280,7 @@ const pushPublication = async (agent: Agent, action: Action, pub: PublicationWit
       name: pub.name,
       description: pub.description,
       icon,
+      basicTheme,
       preferences: { showInDiscover: true },
     },
   });
