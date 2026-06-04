@@ -57,7 +57,7 @@ const publication = {
 const posts = await readMarkdownFiles("data/posts/*.md");
 const docs = posts.map((p) => ({
   title: p.meta.title!,
-  publishedAt: p.meta.date!,
+  publishedAt: new Date(p.meta.date!),
   // this path will be appended to publication.url to get the URL:
   path: p.path.slice("data/posts/".length, -3) + "/",
 }));
@@ -81,7 +81,7 @@ Then run the script you just created with your password as an env variable:
 
     ATPROTO_PASSWORD=xxxx-xxxx-xxxx-xxxx bun publishToAtmosphere.ts
 
-If you confirm to the script that everything looks good, it will create a file in `routes/.well-known/site.standard.publication`. After that, run it a second time to publish things to the Atmosphere.
+If you confirm to the script that the URLs and derived rkeys look good, it will create a file in `routes/.well-known/site.standard.publication` (The `routes` prefix is what may be `public` in other frameworks than Mastro – use the `opts` argument of [createOrUpdateStandardSite](https://jsr.io/@mastrojs/atproto/doc/~/createOrUpdateStandardSite) to customize.). After that, run it a second time to publish things to the Atmosphere.
 
 You can use e.g. https://pdsls.dev to verify records on the PDS.
 

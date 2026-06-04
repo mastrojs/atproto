@@ -32,10 +32,7 @@ interface Document {
    * the path is appended to your publication url
    */
   path: string;
-  /**
-   * e.g. `2024-01-20T14:30:00.000Z`
-   */
-  publishedAt: string;
+  publishedAt: Date;
   description?: string;
   /**
    * Full plaintext of the article. No markdown."
@@ -48,7 +45,6 @@ type DocumentWithRkey = Document & { rkey: string };
 
 const documentStringFields = [
   "title",
-  "publishedAt",
   "description",
   "textContent",
 ] as const satisfies Array<keyof Document>;
@@ -65,7 +61,7 @@ type Action = "createRecord" | "putRecord";
  *
  * ```
  * <link rel="site.standard.document"
- *   href="at://${myDid}/site.standard.document/${rkeyFromPath(doc.path)}">
+ *   href="at://${myDid}/site.standard.document/${pubPath || "self"}-${rkeyFromPath(doc.path)}">
  * ```
  */
 export const rkeyFromPath = (path: string): string =>
@@ -79,26 +75,27 @@ export const createOrUpdateStandardSite = async (
   session: ConstructorParameters<typeof Agent>[0],
   pub: Publication,
   docs: Document[],
+  opts?: { baseFolder?: string },
 ): Promise<void> => {
   const agent = new Agent(session);
 
   const { pathname } = pub.url;
-  const wellKnown = "routes/.well-known/site.standard.publication" +
-    (pathname === "/" ? "" : (pathname.endsWith("/") ? `${pathname}index.html` : pathname));
+  const pubRkey = pathname === "/" ? "self" : rkeyFromPath(pathname);
+  const wellKnown = `${opts?.baseFolder || "routes"}/.well-known/site.standard.publication${
+    pathname === "/" ? "" : (pathname.endsWith("/") ? `${pathname}index.html` : pathname)
+  }`;
   const publicationUri = await pubUriFromFile(wellKnown);
-
-  // console.log(await agent.com.atproto.repo.listRecords({
-  //   repo: agent.did!,
-  //   collection: "site.standard.publication",
-  //   limit: 100,
-  // }));
-  // console.log(await fetchDocuments(agent, publicationUri));
-  // console.log(await agent.com.atproto.repo.deleteRecord({ repo: agent.did!, collection: "site.standard.publication", rkey: "self" }));
-  // return;
 
   docs.sort((a, b) => a.publishedAt < b.publishedAt ? 1 : -1);
   // limit to 100 until we implement pagination in fetchDocuments
-  const newDocs = validateDocs(docs).slice(0, 100);
+  const newDocs = validateAndAddRkey(docs, pubRkey).slice(0, 100);
+
+  const addLinkText = `
+Don't forget to add the following link tag to your document detail pages using
+import { rkeyFromPath } from "@mastrojs/atproto";
+<link rel="site.standard.document"
+  href="at://${agent.did}/site.standard.document/${pubRkey}-\${rkeyFromPath(doc.path)}">
+`;
 
   if (!publicationUri) {
     if (!stdout.isTTY || process.env.CI) {
@@ -124,9 +121,8 @@ Are all the above URLs correct? (y/n -> Enter)
     rl.close();
     stdin.destroy();
     if (answer.toLowerCase() === "y" || answer.toLowerCase() === "yes") {
-      const rkey = pathname === "/" ? "self" : rkeyFromPath(pub.url.pathname);
       await fs.mkdir(dirname(wellKnown), { recursive: true });
-      await fs.writeFile(wellKnown, `at://${agent.did}/site.standard.publication/${rkey}`);
+      await fs.writeFile(wellKnown, `at://${agent.did}/site.standard.publication/${pubRkey}`);
       console.clear();
       console.log(`
 Successfully wrote ${wellKnown}
@@ -136,16 +132,13 @@ Next time you run this script, it will publish things into the Atmosphere.
 Either run this script manually whenver you have a new post,
 or set up your CI/CD build step to run it automatically.
 
-Finally, don't forget to add the following snippet containing your DID
-to your document detail pages (import { rkeyFromPath } from "@mastrojs/atproto")
-<link rel="site.standard.document"
-  href="at://${agent.did}/site.standard.document/\${rkeyFromPath(doc.path)}">
+${addLinkText}
 `);
     }
   } else {
-    const rkey = pub.url.pathname === "/" ? "self" : rkeyFromPath(pub.url.pathname);
-    await createOrUpdatePublication(agent, { ...pub, rkey });
+    await createOrUpdatePublication(agent, { ...pub, rkey: pubRkey });
     await createOrUpdateDocuments(agent, publicationUri, newDocs);
+    console.log("\ncreateOrUpdateStandardSite finished successfully.\n" + addLinkText);
   }
 };
 
@@ -239,15 +232,16 @@ const pushPublication = async (agent: Agent, action: Action, pub: PublicationWit
  * Document helpers
  */
 
-const validateDocs = (docs: Document[]) => {
+const validateAndAddRkey = (docs: Document[], rkeyPrefix: string) => {
   const usedRKeys: Record<string, boolean> = {};
   for (const doc of docs) {
     // Basic validation in case people don't typecheck their YAML metadata.
     if (!doc.path) throw Error(`path not found for doc ${doc.title || JSON.stringify(doc)}`);
     if (!doc.title) throw Error(`title not found for doc ${doc.path}`);
     if (!doc.publishedAt) throw Error(`publishedAt not found for doc ${doc.path}`);
-    const rkey = rkeyFromPath(doc.path);
+    let rkey = rkeyFromPath(doc.path);
     if (!rkey) throw Error(`Couldn't construct rkey for doc ${doc.path}`);
+    rkey = `${rkeyPrefix}-${rkey}`;
     if (usedRKeys[rkey]) throw Error(`rkey ${rkey} was already used by another document`);
     usedRKeys[rkey] = true;
     (doc as DocumentWithRkey).rkey = rkey;
@@ -260,15 +254,19 @@ const createOrUpdateDocuments = async (
   publicationUri: string,
   docs: DocumentWithRkey[],
 ) => {
-  const existingDocs: Record<string, DocumentWithRkey> = {};
-  for (const doc of await fetchDocuments(agent, publicationUri)) {
-    existingDocs[doc.rkey] = doc;
+  const existingDocs: Record<string, Record<string, string>> = {};
+  for (const oldDoc of await fetchDocuments(agent, publicationUri)) {
+    existingDocs[oldDoc.rkey] = oldDoc;
   }
   for (const newDoc of docs) {
     const oldDoc = existingDocs[newDoc.rkey];
     if (!oldDoc) {
-      // await pushDocument(agent, publicationUri, "createRecord", newDoc);
-    } else if (documentStringFields.some((field) => oldDoc[field] !== newDoc[field])) {
+      await pushDocument(agent, publicationUri, "createRecord", newDoc);
+    } else if (
+      documentStringFields.some((field) =>
+        oldDoc[field] !== newDoc[field] || oldDoc.publishedAt !== newDoc.publishedAt.toISOString()
+      )
+    ) {
       await pushDocument(agent, publicationUri, "putRecord", newDoc);
     }
   }
@@ -282,7 +280,7 @@ const fetchDocuments = async (agent: Agent, publicationUri: string) => {
   });
   return docs.data.records
     .filter((r) => r.value.site === publicationUri)
-    .map((r) => ({ ...r.value, rkey: r.uri.split("/").pop() } as DocumentWithRkey));
+    .map((r) => ({ ...r.value, rkey: r.uri.split("/").pop() as string }));
 };
 
 const pushDocument = async (
@@ -294,12 +292,12 @@ const pushDocument = async (
   const res = await agent.com.atproto.repo[action]({
     repo: agent.did!,
     collection: "site.standard.document",
-    rkey: (doc as DocumentWithRkey).rkey,
+    rkey: doc.rkey,
     record: {
       $type: "site.standard.document",
       site: publicationUri,
       title: doc.title,
-      publishedAt: doc.publishedAt,
+      publishedAt: doc.publishedAt.toISOString(),
       path: doc.path,
       description: doc.description,
       textContent: doc.textContent,
