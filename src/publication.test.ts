@@ -1,5 +1,5 @@
 import { assert, assertEquals, assertFalse } from "jsr:@std/assert";
-import { type FetchedPublication, pubChanged, type PublicationWithRkey } from "./publication.ts";
+import { comparePubs, type FetchedPublication, type PublicationWithRkey } from "./publication.ts";
 
 const icon = (size: number): any => ({
   size,
@@ -35,63 +35,101 @@ const newPub = (): PublicationWithRkey => ({
 });
 
 Deno.test("pubChanged: identical publications", () => {
-  assertFalse(pubChanged(oldPub(), newPub()));
+  const { pubChanged, updatedPub } = comparePubs(oldPub(), newPub());
+  assertFalse(pubChanged);
+  assertEquals(updatedPub.icon, icon(100));
 });
 
 Deno.test("pubChanged: name changed", () => {
-  assert(pubChanged(oldPub(), { ...newPub(), name: "Other" }));
+  const { pubChanged, updatedPub } = comparePubs(oldPub(), { ...newPub(), name: "New Name" });
+  assert(pubChanged);
+  assertEquals(updatedPub.icon, icon(100));
 });
 
 Deno.test("pubChanged: description changed", () => {
-  assert(pubChanged(oldPub(), { ...newPub(), description: "New desc" }));
+  const { pubChanged, updatedPub } = comparePubs(oldPub(), {
+    ...newPub(),
+    description: "New description",
+  });
+  assert(pubChanged);
+  assertEquals(updatedPub.icon, icon(100));
 });
 
-Deno.test("pubChanged: icon same size — deletes icon from pub to skip re-upload", () => {
-  const pub = newPub();
-  assertFalse(pubChanged(oldPub(), pub));
-  assertEquals(pub.icon, undefined);
+Deno.test("pubChanged: icon same size — keeps existing BlobRef to skip re-upload", () => {
+  const pub = { ...newPub(), icon: blob(100) };
+  const { pubChanged, updatedPub } = comparePubs(oldPub(), pub);
+  assertFalse(pubChanged);
+  assertEquals(updatedPub.icon, icon(100));
+});
+
+Deno.test("pubChanged: name changed, icon stays", () => {
+  const { pubChanged, updatedPub } = comparePubs(oldPub(), { ...newPub(), name: "New Name" });
+  assert(pubChanged);
+  assertEquals(updatedPub.icon, icon(100));
+});
+
+Deno.test("pubChanged: name changed, no icon stays", () => {
+  const { pubChanged, updatedPub } = comparePubs({ ...oldPub(), icon: undefined }, {
+    ...newPub(),
+    name: "New Name",
+    icon: undefined,
+  });
+  assert(pubChanged);
+  assertEquals(updatedPub.icon, undefined);
 });
 
 Deno.test("pubChanged: icon size changed", () => {
-  assert(pubChanged(oldPub(), { ...newPub(), icon: blob(200) }));
+  const newIcon = blob(200);
+  const { pubChanged, updatedPub } = comparePubs(oldPub(), { ...newPub(), icon: newIcon });
+  assert(pubChanged);
+  assertEquals(updatedPub.icon, newIcon);
 });
 
-Deno.test("pubChanged: icon added", () => {
-  assert(pubChanged({ ...oldPub(), icon: undefined }, newPub()));
+Deno.test("pubChanged: new icon added for upload", () => {
+  const { pubChanged, updatedPub } = comparePubs({ ...oldPub(), icon: undefined }, newPub());
+  assert(pubChanged);
+  assertEquals(updatedPub.icon, blob(100));
 });
 
 Deno.test("pubChanged: icon removed", () => {
-  assert(pubChanged(oldPub(), { ...newPub(), icon: undefined }));
+  const { pubChanged, updatedPub } = comparePubs(oldPub(), { ...newPub(), icon: undefined });
+  assert(pubChanged);
+  assertEquals(updatedPub.icon, undefined);
 });
 
-Deno.test("pubChanged: icon still not there", () => {
-  assertFalse(pubChanged({ ...oldPub(), icon: undefined }, { ...newPub(), icon: undefined }));
+Deno.test("pubChanged: no icon in either publication", () => {
+  const { pubChanged, updatedPub } = comparePubs({ ...oldPub(), icon: undefined }, {
+    ...newPub(),
+    icon: undefined,
+  });
+  assertFalse(pubChanged);
+  assertEquals(updatedPub.icon, undefined);
 });
 
 Deno.test("pubChanged: theme color changed", () => {
-  assert(pubChanged(oldPub(), {
-    ...newPub(),
-    basicTheme: { ...theme(), background: { r: 0, g: 0, b: 0 } },
-  }));
+  const pub = { ...newPub(), basicTheme: { ...theme(), background: { r: 128, g: 0, b: 0 } } };
+  const { pubChanged, updatedPub } = comparePubs(oldPub(), pub);
+  assert(pubChanged);
+  assertEquals(updatedPub.icon, icon(100));
 });
 
-Deno.test("pubChanged: no theme on either side", () => {
-  assertFalse(pubChanged(
-    { ...oldPub(), basicTheme: undefined },
-    { ...newPub(), basicTheme: undefined },
-  ));
+Deno.test("pubChanged: no theme in either publication", () => {
+  const { pubChanged, updatedPub } = comparePubs({ ...oldPub(), basicTheme: undefined }, {
+    ...newPub(),
+    basicTheme: undefined,
+  });
+  assertFalse(pubChanged);
+  assertEquals(updatedPub.icon, icon(100));
 });
 
 Deno.test("pubChanged: theme added", () => {
-  assert(pubChanged(
-    { ...oldPub(), basicTheme: undefined },
-    newPub(),
-  ));
+  const { pubChanged, updatedPub } = comparePubs({ ...oldPub(), basicTheme: undefined }, newPub());
+  assert(pubChanged);
+  assertEquals(updatedPub.icon, icon(100));
 });
 
 Deno.test("pubChanged: theme removed", () => {
-  assert(pubChanged(
-    oldPub(),
-    { ...newPub(), basicTheme: undefined },
-  ));
+  const { pubChanged, updatedPub } = comparePubs(oldPub(), { ...newPub(), basicTheme: undefined });
+  assert(pubChanged);
+  assertEquals(updatedPub.icon, icon(100));
 });

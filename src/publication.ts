@@ -18,6 +18,7 @@ export interface Publication {
 }
 
 export type PublicationWithRkey = Publication & { rkey: string };
+type PublicationWithOldIcon = Omit<PublicationWithRkey, "icon"> & { icon?: BlobRef };
 
 export interface FetchedPublication {
   name: string;
@@ -71,27 +72,28 @@ export const createOrUpdatePublication = async (agent: Agent, pub: PublicationWi
   const oldPub = await fetchPublication(agent, pub.rkey);
   if (!oldPub) {
     await pushPublication(agent, "createRecord", pub);
-  } else if (pubChanged(oldPub, pub)) {
-    await pushPublication(agent, "putRecord", pub);
+  } else {
+    const { pubChanged, updatedPub } = comparePubs(oldPub, pub);
+    if (pubChanged) {
+      await pushPublication(agent, "putRecord", updatedPub);
+    }
   }
 };
 
-export const pubChanged = (oldPub: FetchedPublication, pub: PublicationWithRkey): boolean => {
-  const iconChanged =
-    oldPub.icon?.size !== (pub.icon ? Buffer.byteLength(pub.icon.blob) : undefined);
-  if (!iconChanged) {
-    // don't upload a new blob but potentially still update the other fields
-    delete pub.icon;
-  }
-  const oldTheme = oldPub.basicTheme;
+export const comparePubs = (oldPub: FetchedPublication, pub: PublicationWithRkey) => {
+  const { icon: oldIcon, basicTheme: oldTheme } = oldPub;
+  const iconChanged = oldIcon?.size !== (pub.icon ? Buffer.byteLength(pub.icon.blob) : undefined);
   const newTheme = pub.basicTheme;
   const themeChanged = themeKeys.some((key) =>
     oldTheme?.[key].r !== newTheme?.[key].r ||
     oldTheme?.[key].g !== newTheme?.[key].g ||
     oldTheme?.[key].b !== newTheme?.[key].b
   );
-  return iconChanged || themeChanged || oldPub.name !== pub.name ||
-    oldPub.description !== pub.description;
+  const stringFieldChanged = oldPub.name !== pub.name || oldPub.description !== pub.description;
+  return {
+    pubChanged: iconChanged || themeChanged || stringFieldChanged,
+    updatedPub: iconChanged ? pub : { ...pub, icon: oldIcon },
+  };
 };
 
 const fetchPublication = async (agent: Agent, rkey: string) => {
@@ -111,21 +113,27 @@ const fetchPublication = async (agent: Agent, rkey: string) => {
   }
 };
 
-const pushPublication = async (agent: Agent, action: Action, pub: PublicationWithRkey) => {
+const pushPublication = async (
+  agent: Agent,
+  action: Action,
+  pub: PublicationWithRkey | PublicationWithOldIcon,
+) => {
   let icon;
-  if (pub.icon) {
+  if (pub.icon && "blob" in pub.icon) {
     const res = await agent.com.atproto.repo.uploadBlob(
       new Uint8Array(pub.icon.blob),
       { encoding: pub.icon.mimeType },
     );
     console.log("Uploaded new icon");
-    const { blob } = res.data;
+    const { mimeType, ref, size } = res.data.blob;
     icon = {
       $type: "blob",
-      ref: { $link: blob.ref.toString() },
-      mimeType: blob.mimeType,
-      size: blob.size,
+      ref: { $link: ref.toString() },
+      mimeType,
+      size,
     };
+  } else {
+    icon = pub.icon;
   }
 
   const theme = pub.basicTheme;
