@@ -93,3 +93,8 @@ After that, run it a second time to publish things to the Atmosphere. Optionally
 
 You can use e.g. https://site-validator.fly.dev to verify [standard.site](https://standard.site/) records on the PDS.
 To see all functions `@mastrojs/atproto` exports, see its [API docs](https://jsr.io/@mastrojs/atproto/doc).
+
+
+## Contribute
+
+This project is happy to accept bug reports and/or contributions! To debug things, https://pdsls.dev can be helpful.

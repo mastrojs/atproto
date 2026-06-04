@@ -1,7 +1,8 @@
 {
   "name": "@mastrojs/atproto",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "tasks": {
+    "publish": "deno test && deno publish"
   },
   "fmt": {
     "lineWidth": 100
