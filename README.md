@@ -1,6 +1,8 @@
 # @mastrojs/atproto
 
-Helper scripts to integrate with the Atmosphere. Currently for creating and updating [standard.site](https://standard.site/) records from your existing website without the headache.
+Helper scripts to integrate with the [Atmosphere](https://atproto.com).
+
+Create and update [standard.site](https://standard.site/) records from your existing website without the headache. No need to store [rkeys](https://atproto.com/specs/record-key) in your YAML frontmatter or database. Instead, we derive them from the URL paths of your existing website. For more info, see [our blog post](https://mastrojs.github.io/blog/2026-06-05-how-to-add-standard-site-support-to-your-website/).
 
 
 ## How?
@@ -102,7 +104,16 @@ If you confirm to the script that the URLs and derived rkeys look good, it will 
 
 After that, run it a second time to publish things to the Atmosphere. Optionally, you can then set up your CI/CD pipeline to run the script on each deploy.
 
+Don't forget to add the following link tag to your document detail pages using
+`import { rkeyFromPath } from "@mastrojs/atproto";`
+
+```js
+<link rel="site.standard.document"
+  href={`at://${agent.did}/site.standard.document/${rkeyFromPath(doc.path)}`}>
+```
+
 You can use e.g. https://site-validator.fly.dev to verify [standard.site](https://standard.site/) records on the PDS.
+
 To see all functions `@mastrojs/atproto` exports, see its [API docs](https://jsr.io/@mastrojs/atproto/doc).
 
 
