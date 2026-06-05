@@ -73,9 +73,9 @@ export const createOrUpdatePublication = async (agent: Agent, pub: PublicationWi
   if (!oldPub) {
     await pushPublication(agent, "createRecord", pub);
   } else {
-    const { pubChanged, updatedPub } = comparePubs(oldPub, pub);
-    if (pubChanged) {
-      await pushPublication(agent, "putRecord", updatedPub);
+    const changedPub = comparePubs(oldPub, pub);
+    if (changedPub) {
+      await pushPublication(agent, "putRecord", changedPub);
     }
   }
 };
@@ -90,10 +90,9 @@ export const comparePubs = (oldPub: FetchedPublication, pub: PublicationWithRkey
     oldTheme?.[key].b !== newTheme?.[key].b
   );
   const stringFieldChanged = oldPub.name !== pub.name || oldPub.description !== pub.description;
-  return {
-    pubChanged: iconChanged || themeChanged || stringFieldChanged,
-    updatedPub: iconChanged ? pub : { ...pub, icon: oldIcon },
-  };
+  return iconChanged || themeChanged || stringFieldChanged
+    ? (iconChanged ? pub : { ...pub, icon: oldIcon }) // don't re-upload icon if not changed
+    : undefined;
 };
 
 const fetchPublication = async (agent: Agent, rkey: string) => {
