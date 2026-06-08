@@ -71,7 +71,7 @@ ${pub.url}
 
 Are all the above URLs correct? (y/n -> Enter)
 `);
-    // TODO: use `process.stdin.setRawMode(true)` etc. to immediately detect keypress
+    // TODO: [y/n] and use `process.stdin.setRawMode(true)` etc. to immediately detect keypress
     rl.close();
     stdin.destroy();
     if (answer.toLowerCase() === "y" || answer.toLowerCase() === "yes") {

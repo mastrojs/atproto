@@ -4,6 +4,8 @@ Helper scripts to integrate with the [Atmosphere](https://atproto.com).
 
 Create and update [standard.site](https://standard.site/) records from your existing website without the headache. No need to store [rkeys](https://atproto.com/specs/record-key) in your YAML frontmatter or database. Instead, we derive them from the URL paths of your existing website. For more info, see [our blog post](https://mastrojs.github.io/blog/2026-06-05-how-to-add-standard-site-support-to-your-website/).
 
+**Disclaimer**: While our approach works on Bluesky, note that the Standard.site schema apparently says the rkeys should be of type `TID`. There is an [ongoing discussion](https://tangled.org/standard.site/lexicons/issues/7#comment-3mnm5xd5prb22) whether this can be relaxed to type `any`.
+
 
 ## How?
 
