@@ -4,8 +4,6 @@ Helper scripts to integrate with the [Atmosphere](https://atproto.com).
 
 Create and update [standard.site](https://standard.site/) records from your existing website without the headache. No need to store [rkeys](https://atproto.com/specs/record-key) in your YAML frontmatter or database. Instead, we derive them from the URL paths of your existing website. For more info, see [our blog post](https://mastrojs.github.io/blog/2026-06-05-how-to-add-standard-site-support-to-your-website/).
 
-**Disclaimer**: While our approach works on Bluesky, note that the Standard.site schema apparently says the rkeys should be of type `TID`. There is an [ongoing discussion](https://tangled.org/standard.site/lexicons/issues/7#comment-3mnm5xd5prb22) whether this can be relaxed to type `any`.
-
 
 ## How?
 
@@ -43,21 +41,11 @@ import {
 } from "@mastrojs/atproto";
 
 const identifier = "your.bsky.social";
-
 const password = process.env.ATPROTO_PASSWORD;
-if (!password) {
-  console.error(`
-No password found!
-
-Get one from https://bsky.app/settings/app-passwords and run locally with:
-ATPROTO_PASSWORD=xxxx-xxxx-xxxx-xxxx node publishToAtmosphere.ts
-In a CI/CD pipeline, add the password to your secret manager instead.
-`);
-  process.exit(1);
-}
+const pubUrl = new URL("https://example.com/news/");
 
 const publication: Publication = {
-  url: new URL("https://example.com/news/"),
+  url: pubUrl,
   name: "Peter's News",
   description: "",
   // Optional square image for the publication, should be at least 256x256:
@@ -65,7 +53,7 @@ const publication: Publication = {
     blob: await fs.readFile("icon.png"),
     mimeType: "image/png",
   },
-  // Optional RGB colors:
+  // Optional RGB colors, make sure you have enough contrast:
   basicTheme: {
     background: { r: 255, g: 255, b: 255 },
     foreground: { r: 23, g: 24, b: 28 },
@@ -78,14 +66,12 @@ const posts = await readMarkdownFiles("data/posts/*.md");
 const docs = posts.map((p) => ({
   title: p.meta.title!,
   publishedAt: new Date(p.meta.date!),
-  // this path will be appended to publication.url to get the full URL:
-  path: p.path.slice("data/posts/".length, -3) + "/",
+  // `readMarkdownFiles` returns file names under p.path
+  // slice off "data/posts/" from the start, and ".md" from the end:
+  url: new URL(p.path.slice("data/posts/".length, -3) + "/", pubUrl),
 }));
 
-const session = new CredentialSession(new URL("https://bsky.social"));
-await session.login({ identifier, password });
-
-await createOrUpdateStandardSite(session, publication, docs);
+await createOrUpdateStandardSite({ identifier, password }, publication, docs);
 ```
 
 Then run the above script with your password as an env variable:
@@ -102,23 +88,23 @@ Then run the above script with your password as an env variable:
 
     ATPROTO_PASSWORD=xxxx-xxxx-xxxx-xxxx bun publishToAtmosphere.ts
 
-If you confirm to the script that the URLs and derived rkeys look good, it will create a file in `routes/.well-known/site.standard.publication` (The `routes` prefix is what may be `public` in other frameworks than Mastro – use the `opts` argument of [createOrUpdateStandardSite](https://jsr.io/@mastrojs/atproto/doc/~/createOrUpdateStandardSite) to customize).
+If you confirm to the script that everything looks good, it will create a publication in the Atmosphere, and write a file to `routes/.well-known/site.standard.publication` (The `routes` prefix is what may be `public` in other frameworks than Mastro – use the `opts` argument of [createOrUpdateStandardSite](https://jsr.io/@mastrojs/atproto/doc/~/createOrUpdateStandardSite) to customize).
 
-After that, run it a second time to publish things to the Atmosphere. Optionally, you can then set up your CI/CD pipeline to run the script on each deploy.
+After that, run it a second time to publish your documents to the Atmosphere. Optionally, you can then set up your CI/CD pipeline to run the script on each deploy.
 
 Don't forget to add the following link tag to your document detail pages using
-`import { rkeyFromPath } from "@mastrojs/atproto";`
+`import { rkeyFromUrl } from "@mastrojs/atproto";`
 
 ```js
 <link rel="site.standard.document"
-  href={`at://${agent.did}/site.standard.document/${rkeyFromPath(doc.path)}`}>
+  href={`at://${agent.did}/site.standard.document/${rkeyFromUrl(doc.url)}`}>
 ```
 
-You can use e.g. https://site-validator.fly.dev to verify [standard.site](https://standard.site/) records on the PDS.
+You can use e.g. https://site-validator.fly.dev or [pdsls.dev](https://pdsls.dev) to verify [standard.site](https://standard.site/) records on the PDS. To browse and edit records manually, use [Taproot](https://atproto.at).
 
 To see all functions `@mastrojs/atproto` exports, see its [API docs](https://jsr.io/@mastrojs/atproto/doc).
 
 
 ## Contribute
 
-This project is happy to accept bug reports and/or contributions! To debug things, https://pdsls.dev can be helpful.
+This project is happy to accept bug reports and/or contributions! Just open a GitHub issue or talk to us on [Bluesky](https://bsky.app/profile/mastrojs.bsky.social)

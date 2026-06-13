@@ -1,4 +1,4 @@
-import { assert, assertEquals } from "jsr:@std/assert";
+import { assertEquals } from "jsr:@std/assert";
 import { comparePubs, type FetchedPublication, type PublicationWithRkey } from "./publication.ts";
 
 const icon = (size: number): any => ({
@@ -20,6 +20,7 @@ const theme = () => ({
 const oldPub = (): FetchedPublication => ({
   name: "My Blog",
   description: "A blog",
+  url: "https://example.com",
   icon: icon(100),
   basicTheme: theme(),
   preferences: { showInDiscover: true },

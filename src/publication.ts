@@ -22,7 +22,8 @@ type PublicationWithOldIcon = Omit<PublicationWithRkey, "icon"> & { icon?: BlobR
 
 export interface FetchedPublication {
   name: string;
-  description: string;
+  url: string;
+  description?: string;
   icon?: BlobRef;
   basicTheme?: BasicTheme;
   preferences: { showInDiscover: boolean };
@@ -56,11 +57,15 @@ const themeKeys = [
 
 export const pubUriFromFile = async (wellKnownFilePath: string) => {
   try {
-    const pubUri = await fs.readFile(wellKnownFilePath, { encoding: "utf8" });
-    if (!pubUri.startsWith("at://")) {
-      throw Error(`publicationUri must be an at:// protocol URI, was ${pubUri}`);
+    const uri = await fs.readFile(wellKnownFilePath, { encoding: "utf8" });
+    if (!uri.startsWith("at://")) {
+      throw Error(`publicationUri must be an at:// protocol URI, was ${uri}`);
     }
-    return pubUri;
+    const [_, rkey] = uri.split("/site.standard.publication/");
+    if (!rkey) {
+      throw Error(`Could not extract site.standard.publication rkey from ${uri}`);
+    }
+    return { uri, rkey };
   } catch (e: any) {
     if (e.code !== "ENOENT") {
       throw e;
@@ -76,8 +81,11 @@ export const createOrUpdatePublication = async (agent: Agent, pub: PublicationWi
     const changedPub = comparePubs(oldPub, pub);
     if (changedPub) {
       await pushPublication(agent, "putRecord", changedPub);
+      const pubPathChanged = new URL(oldPub.url).pathname !== pub.url.pathname;
+      return pubPathChanged;
     }
   }
+  return false;
 };
 
 export const comparePubs = (oldPub: FetchedPublication, pub: PublicationWithRkey) => {
@@ -89,7 +97,8 @@ export const comparePubs = (oldPub: FetchedPublication, pub: PublicationWithRkey
     oldTheme?.[key].g !== newTheme?.[key].g ||
     oldTheme?.[key].b !== newTheme?.[key].b
   );
-  const stringFieldChanged = oldPub.name !== pub.name || oldPub.description !== pub.description;
+  const stringFieldChanged = new URL(oldPub.url).toString() !== pub.url.toString() ||
+    oldPub.name !== pub.name || oldPub.description !== pub.description;
   return iconChanged || themeChanged || stringFieldChanged
     ? (iconChanged ? pub : { ...pub, icon: oldIcon }) // don't re-upload icon if not changed
     : undefined;
@@ -112,11 +121,21 @@ const fetchPublication = async (agent: Agent, rkey: string) => {
   }
 };
 
-const pushPublication = async (
+export function pushPublication(
+  agent: Agent,
+  action: "createRecord",
+  pub: Publication,
+): ReturnType<typeof agent.com.atproto.repo.createRecord>;
+export function pushPublication(
+  agent: Agent,
+  action: "putRecord",
+  pub: PublicationWithRkey | PublicationWithOldIcon,
+): ReturnType<typeof agent.com.atproto.repo.putRecord>;
+export async function pushPublication(
   agent: Agent,
   action: Action,
-  pub: PublicationWithRkey | PublicationWithOldIcon,
-) => {
+  pub: Publication | PublicationWithOldIcon,
+) {
   let icon;
   if (pub.icon && "blob" in pub.icon) {
     const res = await agent.com.atproto.repo.uploadBlob(
@@ -148,7 +167,7 @@ const pushPublication = async (
   const res = await agent.com.atproto.repo[action]({
     repo: agent.did!,
     collection: "site.standard.publication",
-    rkey: pub.rkey,
+    rkey: (pub as PublicationWithRkey).rkey,
     record: {
       $type: "site.standard.publication",
       url: pub.url.toString(),
@@ -161,4 +180,4 @@ const pushPublication = async (
   });
   console.log(`${action === "createRecord" ? "Created" : "Updated"} publication ${res.data.uri}`);
   return res;
-};
+}

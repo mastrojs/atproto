@@ -1,4 +1,5 @@
 import type { Agent } from "@atproto/api";
+import { rkeyFromPath, type RkeyStrategy } from "./rkey.ts";
 
 export type Action = "createRecord" | "putRecord";
 
@@ -10,10 +11,7 @@ export interface Document {
    * Document title
    */
   title: string;
-  /**
-   * the path is appended to your publication url
-   */
-  path: string;
+  url: URL;
   publishedAt: Date;
   description?: string;
   /**
@@ -21,9 +19,12 @@ export interface Document {
    */
   textContent?: string;
   // tags?: string[];
+  /** Optionally provide your own [rkey](https://atproto.com/specs/record-key)
+   * to override the `opts.rkeyStrategy` passed to `createOrUpdateStandardSite` */
+  rkey?: string;
 }
 
-type DocumentWithRkey = Document & { rkey: string };
+type DocumentValidated = Document & { path: string; rkey: string };
 
 const documentStringFields = [
   "title",
@@ -31,58 +32,60 @@ const documentStringFields = [
   "textContent",
 ] as const satisfies Array<keyof Document>;
 
-/**
- * Use this to reconstruct the rkey that was used to publish this document to the Atmosphere.
- * Pass in the same `path` that your document had when you called `createOrUpdateDocuments`.
- *
- * If your blog doesn't live on the homepage of the domain, the optional second argument
- * should be `publication.url.pathname` (e.g. `/blog/`). It defaults to `self`.
- *
- * ```
- * <link rel="site.standard.document"
- *   href="at://${myDid}/site.standard.document/${rkeyFromPath(doc.path, pub.url.pathname)}">
- * ```
- */
-export const rkeyFromPath = (path: string, prefix = "self"): string =>
-  normalizeRkey(`${prefix === "/" ? "self" : prefix}-${path}`);
-
-export const normalizeRkey = (path: string) => path.replace(/[^a-zA-Z0-9._~-]/g, "").slice(0, 512);
-
-export const validateAndAddRkey = (docs: Document[], rkeyPrefix: string) => {
+export const validateAndAddRkey = (
+  docs: Document[],
+  publicationUrl: URL,
+  strategy: RkeyStrategy,
+) => {
   const usedRKeys: Record<string, boolean> = {};
+  const pubPath = publicationUrl.pathname;
   for (const doc of docs) {
     // Basic validation in case people don't typecheck their YAML metadata.
-    if (!doc.path) throw Error(`path not found for doc ${doc.title || JSON.stringify(doc)}`);
-    if (!normalizeRkey(doc.path)) throw Error(`Couldn't construct rkey for doc ${doc.path}`);
-    if (!doc.title) throw Error(`title not found for doc ${doc.path}`);
-    if (!doc.publishedAt) throw Error(`publishedAt not found for doc ${doc.path}`);
-    const rkey = rkeyFromPath(doc.path, rkeyPrefix);
-    if (usedRKeys[rkey]) throw Error(`rkey ${rkey} was already used by another document`);
-    usedRKeys[rkey] = true;
-    (doc as DocumentWithRkey).rkey = rkey;
+    if (!doc.url) throw Error(`doc.url not found for doc: ${doc.title || JSON.stringify(doc)}`);
+    if (!doc.title) throw Error(`doc.title not found for doc "${doc.url}"`);
+    if (!doc.publishedAt) throw Error(`doc.publishedAt not found for doc "${doc.url}"`);
+
+    const { pathname } = doc.url;
+    const path = pathname.slice(pubPath.length);
+    (doc as DocumentValidated).path = path;
+
+    if (!doc.rkey) {
+      if (!pathname.startsWith(pubPath)) {
+        throw Error(
+          `doc.url path must start with publication.url path (i.e. ${pubPath}), but was ${pathname}`,
+        );
+      }
+      const rkey = rkeyFromPath(pathname, strategy);
+      if (!rkey) throw Error(`Couldn't construct rkey for doc ${doc.url}`);
+      if (usedRKeys[rkey]) throw Error(`rkey ${rkey} was already used by another document`);
+      usedRKeys[rkey] = true;
+      doc.rkey = rkey;
+    }
   }
-  return docs as DocumentWithRkey[];
+  return docs as DocumentValidated[];
 };
 
 export const createOrUpdateDocuments = async (
   agent: Agent,
-  publicationUri: string,
-  docs: DocumentWithRkey[],
+  docs: DocumentValidated[],
+  publicationAtUri: string,
+  pubPathChanged: boolean,
 ) => {
   const existingDocs: Record<string, Record<string, string>> = {};
-  for (const oldDoc of await fetchDocuments(agent, publicationUri)) {
+  for (const oldDoc of await fetchDocuments(agent, publicationAtUri)) {
     existingDocs[oldDoc.rkey] = oldDoc;
   }
   for (const newDoc of docs) {
     const oldDoc = existingDocs[newDoc.rkey];
     if (!oldDoc) {
-      await pushDocument(agent, publicationUri, "createRecord", newDoc);
+      await pushDocument(agent, publicationAtUri, "createRecord", newDoc);
     } else if (
+      pubPathChanged ||
       documentStringFields.some((field) =>
         oldDoc[field] !== newDoc[field] || oldDoc.publishedAt !== newDoc.publishedAt.toISOString()
       )
     ) {
-      await pushDocument(agent, publicationUri, "putRecord", newDoc);
+      await pushDocument(agent, publicationAtUri, "putRecord", newDoc);
     }
   }
 };
@@ -102,7 +105,7 @@ const pushDocument = async (
   agent: Agent,
   publicationUri: string,
   action: Action,
-  doc: DocumentWithRkey,
+  doc: DocumentValidated,
 ) => {
   const res = await agent.com.atproto.repo[action]({
     repo: agent.did!,
@@ -121,6 +124,13 @@ const pushDocument = async (
       // bskyPostRef: { uri: "at://mastrojs.bsky.social/app.bsky.feed.post/3mmrn4yif6s2c", cid: "..." },
     },
   });
-  console.log(`${action === "createRecord" ? "Created" : "Updated"} document ${res.data.uri}`);
+  console.log(
+    `${
+      action === "createRecord" ? "Created" : "Updated"
+    } ${doc.path} ${ansiSetBlue}${res.data.uri}${ansiResetStyles}`,
+  );
   return res;
 };
+
+const ansiSetBlue = "\x1b[34m";
+const ansiResetStyles = "\x1b[0m";
