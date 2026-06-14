@@ -4,6 +4,7 @@ Helper scripts to integrate with the [Atmosphere](https://atproto.com).
 
 Create and update [standard.site](https://standard.site/) records from your existing website without the headache. No need to store [rkeys](https://atproto.com/specs/record-key) in your YAML frontmatter or database. Instead, we derive them from the URL paths of your existing website. For more info, see [our blog post](https://mastrojs.github.io/blog/2026-06-05-how-to-add-standard-site-support-to-your-website/).
 
+![](terminal-recording.svg)
 
 ## How?
 
@@ -33,12 +34,8 @@ Create a new file, e.g. `publishToAtmosphere.ts`, with the following content and
 
 ```ts
 import fs from "node:fs/promises";
+import { createOrUpdateStandardSite, type Publication } from "@mastrojs/atproto";
 import { readMarkdownFiles } from "@mastrojs/markdown";
-import {
-  createOrUpdateStandardSite,
-  CredentialSession,
-  type Publication,
-} from "@mastrojs/atproto";
 
 const identifier = "your.bsky.social";
 const password = process.env.ATPROTO_PASSWORD;
@@ -62,19 +59,17 @@ const publication: Publication = {
   },
 };
 
-const posts = await readMarkdownFiles("data/posts/*.md");
+const posts = await readMarkdownFiles<{title: string; date: string}>("data/posts/*.md");
 const docs = posts.map((p) => ({
-  title: p.meta.title!,
-  publishedAt: new Date(p.meta.date!),
-  // `readMarkdownFiles` returns file names under p.path
-  // slice off "data/posts/" from the start, and ".md" from the end:
-  url: new URL(p.path.slice("data/posts/".length, -3) + "/", pubUrl),
+  title: p.meta.title,
+  publishedAt: new Date(p.meta.date),
+  url: new URL(p.slug + "/", pubUrl),
 }));
 
 await createOrUpdateStandardSite({ identifier, password }, publication, docs);
 ```
 
-Then run the above script with your password as an env variable:
+Then [create an app password](https://bsky.app/settings/app-passwords) and run the above script with it:
 
 ### Deno
 
