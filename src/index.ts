@@ -105,15 +105,14 @@ Create publication now? [y/n] `);
         await fs.mkdir(dirname(wellKnown), { recursive: true });
         await fs.writeFile(wellKnown, uri + "\n");
         console.clear();
-        console.log(`Successfully created publication ${uri} and wrote ${wellKnown}`);
+        console.log(`${ansiSetBoldGreen}Successfully created publication${ansiResetStyles}\nURI: ${uri}\n\nAlso wrote ${wellKnown}`);
       } catch (e) {
         console.error(
           `Created publication but failed to write ${wellKnown} Please create it yourself with the following content:\n${uri}`,
           e,
         );
       }
-      console.log(`
-Add that file to your git repository.
+      console.log(`${ansiSetBold}Add that file to your git repository.${ansiResetStyles}
 
 Next time you run this script, it will publish your documents to the Atmosphere.
 Either run this script manually whenver you have a new post,
