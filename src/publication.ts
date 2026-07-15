@@ -57,7 +57,9 @@ const themeKeys = [
 
 export const pubUriFromFile = async (wellKnownFilePath: string) => {
   try {
-    const uri = await fs.readFile(wellKnownFilePath, { encoding: "utf8" });
+    const uri = (
+      await fs.readFile(wellKnownFilePath, { encoding: "utf8" })
+    ).trim();
     if (!uri.startsWith("at://")) {
       throw Error(`publicationUri must be an at:// protocol URI, was ${uri}`);
     }
