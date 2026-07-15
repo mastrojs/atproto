@@ -57,11 +57,13 @@ const themeKeys = [
 
 export const pubUriFromFile = async (wellKnownFilePath: string) => {
   try {
-    const uri = await fs.readFile(wellKnownFilePath, { encoding: "utf8" });
+    const uri = (
+      await fs.readFile(wellKnownFilePath, { encoding: "utf8" })
+    ).trim();
     if (!uri.startsWith("at://")) {
       throw Error(`publicationUri must be an at:// protocol URI, was ${uri}`);
     }
-    const rkey = uri.split("/site.standard.publication/")[1]?.trim();
+    const [_, rkey] = uri.split("/site.standard.publication/");
     if (!rkey) {
       throw Error(`Could not extract site.standard.publication rkey from ${uri}`);
     }

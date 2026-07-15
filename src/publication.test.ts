@@ -1,5 +1,5 @@
 import { assertEquals } from "jsr:@std/assert";
-import { comparePubs, type FetchedPublication, type PublicationWithRkey } from "./publication.ts";
+import { comparePubs, pubUriFromFile, type FetchedPublication, type PublicationWithRkey } from "./publication.ts";
 
 const icon = (size: number): any => ({
   size,
@@ -121,4 +121,13 @@ Deno.test("comparePubs: theme removed", () => {
   const changedPub = comparePubs(oldPub(), { ...newPub(), basicTheme: undefined });
   assertEquals(changedPub?.basicTheme, undefined);
   assertEquals(changedPub?.icon, icon(100));
+});
+
+Deno.test("pubUriFromFile", async () => {
+  const pub = await pubUriFromFile("./__fixtures__/well-known/index.html");
+
+  assertEquals(pub, {
+    uri: "at://did:plc:irutxjhccx4xajwsurbjdq6f/site.standard.publication/3mqlriwasx627",
+    rkey: "3mqlriwasx627",
+  });
 });
