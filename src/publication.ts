@@ -63,7 +63,7 @@ export const pubUriFromFile = async (wellKnownFilePath: string) => {
     if (!uri.startsWith("at://")) {
       throw Error(`publicationUri must be an at:// protocol URI, was ${uri}`);
     }
-    const [_, rkey] = uri.split("/site.standard.publication/");
+    const rkey = uri.split("/site.standard.publication/")[1]?.trim();
     if (!rkey) {
       throw Error(`Could not extract site.standard.publication rkey from ${uri}`);
     }

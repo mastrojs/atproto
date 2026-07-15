@@ -39,11 +39,11 @@ import { readMarkdownFiles } from "@mastrojs/markdown";
 
 const identifier = "your.bsky.social";
 const password = process.env.ATPROTO_PASSWORD;
-const pubUrl = new URL("https://example.com/news/");
+const publicationUrl = new URL("https://example.com/blog/");
 
 const publication: Publication = {
-  url: pubUrl,
-  name: "Peter's News",
+  url: publicationUrl,
+  name: "Peter's Blog",
   description: "",
   // Optional square image for the publication, should be at least 256x256:
   icon: {
@@ -63,41 +63,57 @@ const posts = await readMarkdownFiles<{title: string; date: string}>("data/posts
 const docs = posts.map((p) => ({
   title: p.meta.title,
   publishedAt: new Date(p.meta.date),
-  url: new URL(p.slug + "/", pubUrl),
+  url: new URL(p.slug + "/", publicationUrl),
 }));
 
 await createOrUpdateStandardSite({ identifier, password }, publication, docs);
 ```
 
-Then [create an app password](https://bsky.app/settings/app-passwords) and run the above script with it:
+### 1. Run the script the first time to set things up
 
-### Deno
+[Create an app password](https://bsky.app/settings/app-passwords) and run the above script with it:
+
+#### Deno
 
     ATPROTO_PASSWORD=xxxx-xxxx-xxxx-xxxx deno run -A publishToAtmosphere.ts
 
-### Node.js
+#### Node.js
 
     ATPROTO_PASSWORD=xxxx-xxxx-xxxx-xxxx node publishToAtmosphere.ts
 
-### Bun
+#### Bun
 
     ATPROTO_PASSWORD=xxxx-xxxx-xxxx-xxxx bun publishToAtmosphere.ts
 
-If you confirm to the script that everything looks good, it will create a publication in the Atmosphere, and write a file to `routes/.well-known/site.standard.publication` (The `routes` prefix is what may be `public` in other frameworks than Mastro – use the `opts` argument of [createOrUpdateStandardSite](https://jsr.io/@mastrojs/atproto/doc/~/createOrUpdateStandardSite) to customize).
+If you confirm that everything looks good, the script will create a publication in the Atmosphere, and write a file to `baseDir + "/.well-known/site.standard.publication" + suffix`.
 
-After that, run it a second time to publish your documents to the Atmosphere. Optionally, you can then set up your CI/CD pipeline to run the script on each deploy.
+- `baseDir` defaults to `"routes"` – the name of the folder that may be called `public` or similar in other frameworks – use the `opts` argument of [createOrUpdateStandardSite](https://jsr.io/@mastrojs/atproto/doc/~/createOrUpdateStandardSite) to customize.
+- If your `publicationUrl` has no path, `suffix` will be the empty string. But if it's e.g. `https://example.com/blog/`, then `suffix` will be `/blog/index.html`.
 
-Don't forget to add the following link tag to your document detail pages using
-`import { rkeyFromUrl } from "@mastrojs/atproto";`
+Add the file to your git repository. It contains your publication's AT-URI (which needs to be served under that URL by your website). The file also serves as a marker for the script on subsequent runs (so that it doesn't create a new publication in the Atmosphere on each run).
 
-```js
-<link rel="site.standard.document"
-  href={`at://${agent.did}/site.standard.document/${rkeyFromUrl(doc.url)}`}>
-```
+### 2. Run the script again to publish documents
 
-You can use e.g. https://site-validator.fly.dev or [pdsls.dev](https://pdsls.dev) to verify [standard.site](https://standard.site/) records on the PDS. To browse and edit records manually, use [Taproot](https://atproto.at).
+After that, run the script a second time to publish your documents to the Atmosphere.
 
-To see all functions `@mastrojs/atproto` exports, see its [API docs](https://jsr.io/@mastrojs/atproto/doc).
+Optionally, you can then set up your CI/CD pipeline to run the script on each deploy. From now on, each time you run the script, it will update the document records in the Atmosphere. Just make sure you don't change the publicationUrl and document urls anymore now, otherwise you'll get duplicate records.
+
+### 3. Add link tag to your HTML
+
+Don't forget to add the `<link rel="site.standard.document"` tag to your document detail pages. The script outputs the correct snippet containing your DID so that you can copy it.
+
+
+## Verification
+
+You can use e.g. https://site-validator.fly.dev or [pdsls.dev](https://pdsls.dev) to verify [standard.site](https://standard.site/) records on the PDS.
+If the validator complains that the document path does not start with `/` and publication URL has trailing slash, see [this issue for an explanation](https://github.com/mastrojs/atproto/issues/5#issuecomment-4716085056).
+
+To browse, edit and delete records manually, use [Taproot](https://atproto.at).
+
+
+## API Docs
+
+To see all functions and types `@mastrojs/atproto` exports, see its [API docs](https://jsr.io/@mastrojs/atproto/doc).
 
 
 ## Contribute
