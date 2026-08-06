@@ -145,7 +145,7 @@ const detectKeyPress = () =>
 
 const getSession = async (auth: Auth) => {
   if (typeof auth === "object" && "identifier" in auth) {
-    const { identifier, password } = auth;
+    const { identifier, password, service } = auth;
     if (!password) {
       console.error(`
 No password found!
@@ -157,7 +157,7 @@ In your CI/CD pipeline, add the password to a secret manager instead.
       `);
       process.exit(1);
     }
-    const session = new CredentialSession(new URL("https://bsky.social"));
+    const session = new CredentialSession(new URL(service || "https://bsky.social"));
     await session.login({ identifier, password });
     return session;
   } else {
