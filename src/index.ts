@@ -22,7 +22,7 @@ export { rkeyFromUrl, type RkeyStrategy } from "./rkey.ts";
  * that can be passed to `new Agent(session)`.
  */
 export type Auth =
-  | { identifier: string; password: string | undefined }
+  | { identifier: string; password: string | undefined; service?: string | undefined }
   | ConstructorParameters<typeof Agent>[0];
 
 /**
