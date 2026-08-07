@@ -22,7 +22,7 @@ export { rkeyFromUrl, type RkeyStrategy } from "./rkey.ts";
  * that can be passed to `new Agent(session)`.
  */
 export type Auth =
-  | { identifier: string; password: string | undefined }
+  | { identifier: string; password: string; serviceUrl?: string }
   | ConstructorParameters<typeof Agent>[0];
 
 /**
@@ -145,7 +145,7 @@ const detectKeyPress = () =>
 
 const getSession = async (auth: Auth) => {
   if (typeof auth === "object" && "identifier" in auth) {
-    const { identifier, password } = auth;
+    const { identifier, password, serviceUrl } = auth;
     if (!password) {
       console.error(`
 No password found!
@@ -157,7 +157,7 @@ In your CI/CD pipeline, add the password to a secret manager instead.
       `);
       process.exit(1);
     }
-    const session = new CredentialSession(new URL("https://bsky.social"));
+    const session = new CredentialSession(new URL(serviceUrl || "https://bsky.social"));
     await session.login({ identifier, password });
     return session;
   } else {
