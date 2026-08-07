@@ -113,7 +113,7 @@ To browse, edit and delete records manually, use [Taproot](https://atproto.at).
 
 ## API Docs
 
-To see all functions and types `@mastrojs/atproto` exports, see its [API docs](https://jsr.io/@mastrojs/atproto/doc).
+To see all functions and types `@mastrojs/atproto` exports (e.g. various ways to [authenticate](https://jsr.io/@mastrojs/atproto/doc/~/Auth)), see its [API docs](https://jsr.io/@mastrojs/atproto/doc).
 
 
 ## Contribute

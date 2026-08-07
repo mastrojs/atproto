@@ -22,7 +22,8 @@ export { rkeyFromUrl, type RkeyStrategy } from "./rkey.ts";
  * that can be passed to `new Agent(session)`.
  */
 export type Auth =
-  | { identifier: string; password: string; serviceUrl?: string }
+  // we use `password: string | undefined` because that's the type of `process.env.ATPROTO_PASSWORD`
+  | { identifier: string; password: string | undefined; serviceUrl?: string }
   | ConstructorParameters<typeof Agent>[0];
 
 /**
