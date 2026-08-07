@@ -79,16 +79,17 @@ export const createOrUpdateDocuments = async (
     const oldDoc = existingDocs[newDoc.rkey];
     if (!oldDoc) {
       await pushDocument(agent, publicationAtUri, "createRecord", newDoc);
-    } else if (
-      pubPathChanged ||
-      documentStringFields.some((field) =>
-        oldDoc[field] !== newDoc[field] || oldDoc.publishedAt !== newDoc.publishedAt.toISOString()
-      )
-    ) {
+    } else if (pubPathChanged || docChanged(oldDoc, newDoc)) {
       await pushDocument(agent, publicationAtUri, "putRecord", newDoc);
     }
   }
 };
+
+// TODO: export this function and test it in `document.test.ts`
+const docChanged = (oldDoc: Record<string, string>, newDoc: Document) =>
+  documentStringFields.some((field) =>
+    oldDoc[field] !== newDoc[field] || oldDoc.publishedAt !== newDoc.publishedAt.toISOString()
+  );
 
 const fetchDocuments = async (agent: Agent, publicationUri: string) => {
   const docs = await agent.com.atproto.repo.listRecords({
