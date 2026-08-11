@@ -166,20 +166,25 @@ export async function pushPublication(
     }
     : undefined;
 
-  const res = await agent.com.atproto.repo[action]({
-    repo: agent.did!,
-    collection: "site.standard.publication",
-    rkey: (pub as PublicationWithRkey).rkey,
-    record: {
-      $type: "site.standard.publication",
-      url: pub.url.toString(),
-      name: pub.name,
-      description: pub.description,
-      icon,
-      basicTheme,
-      preferences: { showInDiscover: true },
-    },
-  });
-  console.log(`${action === "createRecord" ? "Created" : "Updated"} publication ${res.data.uri}`);
-  return res;
+  try {
+    const res = await agent.com.atproto.repo[action]({
+      repo: agent.did!,
+      collection: "site.standard.publication",
+      rkey: (pub as PublicationWithRkey).rkey,
+      record: {
+        $type: "site.standard.publication",
+        url: pub.url.toString(),
+        name: pub.name,
+        description: pub.description,
+        icon,
+        basicTheme,
+        preferences: { showInDiscover: true },
+      },
+    });
+    console.log(`${action === "createRecord" ? "Created" : "Updated"} publication ${res.data.uri}`);
+    return res;
+  } catch (e) {
+    console.error(`pushPublication failed to ${action}`, pub, e);
+    process.exit(1);
+  }
 }

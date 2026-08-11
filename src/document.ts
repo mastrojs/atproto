@@ -108,29 +108,34 @@ const pushDocument = async (
   action: Action,
   doc: DocumentValidated,
 ) => {
-  const res = await agent.com.atproto.repo[action]({
-    repo: agent.did!,
-    collection: "site.standard.document",
-    rkey: doc.rkey,
-    record: {
-      $type: "site.standard.document",
-      site: publicationUri,
-      title: doc.title,
-      publishedAt: doc.publishedAt.toISOString(),
-      path: doc.path,
-      description: doc.description,
-      textContent: doc.textContent,
-      // tags: doc.tags,
-      // Optional: link back to a Bluesky post for comments
-      // bskyPostRef: { uri: "at://mastrojs.bsky.social/app.bsky.feed.post/3mmrn4yif6s2c", cid: "..." },
-    },
-  });
-  console.log(
-    `${
-      action === "createRecord" ? "Created" : "Updated"
-    } ${doc.path} ${ansiSetBlue}${res.data.uri}${ansiResetStyles}`,
-  );
-  return res;
+  try {
+    const res = await agent.com.atproto.repo[action]({
+      repo: agent.did!,
+      collection: "site.standard.document",
+      rkey: doc.rkey,
+      record: {
+        $type: "site.standard.document",
+        site: publicationUri,
+        title: doc.title,
+        publishedAt: doc.publishedAt.toISOString(),
+        path: doc.path,
+        description: doc.description,
+        textContent: doc.textContent,
+        // tags: doc.tags,
+        // Optional: link back to a Bluesky post for comments
+        // bskyPostRef: { uri: "at://mastrojs.bsky.social/app.bsky.feed.post/3mmrn4yif6s2c", cid: "..." },
+      },
+    });
+    console.log(
+      `${
+        action === "createRecord" ? "Created" : "Updated"
+      } ${doc.path} ${ansiSetBlue}${res.data.uri}${ansiResetStyles}`,
+    );
+    return res;
+  } catch (e) {
+    console.error(`pushDocument failed to ${action} for ${publicationUri}`, doc, e);
+    process.exit(1);
+  }
 };
 
 const ansiSetBlue = "\x1b[34m";
