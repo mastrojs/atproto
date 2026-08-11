@@ -1,6 +1,6 @@
 {
   "name": "@mastrojs/atproto",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "tasks": {
     "publish": "deno test --allow-read && deno publish"
   },
